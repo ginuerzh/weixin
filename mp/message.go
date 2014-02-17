@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-const (
-	customMessageUri = "/message/custom/send"
-)
-
 type MsgType string
 type EventType string
 
@@ -39,21 +35,26 @@ type MsgHeader struct {
 	MsgType      string
 }
 
+type ServiceMsgHeader struct {
+	ToUser  string `json:"touser"`
+	MsgType string `json:"msgtype"`
+}
+
 type TitleDesc struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 }
 
 type Music struct {
-	MusicURL     string
-	HQMusicUrl   string
-	ThumbMediaId string
+	MusicURL     string `json:"musicurl"`
+	HQMusicUrl   string `json:"hqmusicurl"`
+	ThumbMediaId string `json:"thumb_media_id"`
 }
 
 type Article struct {
 	TitleDesc
-	PicUrl string
-	Url    string
+	PicUrl string `json:"picurl"`
+	Url    string `json:"url"`
 }
 
 type Message struct {
@@ -81,17 +82,16 @@ type Message struct {
 	Precision    float64
 }
 
-type MessageReplyer interface {
-	ReplyText(content string) error
-	ReplyImage(mediaId string) error
-	ReplyVoice(mediaId string) error
-	ReplyVideo(mediaId string, info TitleDesc) error
-	ReplyMusic(info TitleDesc, music Music) error
-	ReplyImageText(articles []Article) error
+type MessageSender interface {
+	SendText(touser string, content string) error
+	SendImage(touser string, mediaId string) error
+	SendVoice(touser string, mediaId string) error
+	SendVideo(touser string, mediaId string, info TitleDesc) error
+	SendMusic(touser string, info TitleDesc, music Music) error
+	SendImageText(touser string, articles []Article) error
 }
 
 type messageReply struct {
-	toUserName   string
 	fromUserName string
 	w            http.ResponseWriter
 }
@@ -106,7 +106,7 @@ func (r *messageReply) reply(v interface{}) error {
 	return err
 }
 
-func (r *messageReply) ReplyText(content string) error {
+func (r *messageReply) SendText(touser string, content string) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -114,7 +114,7 @@ func (r *messageReply) ReplyText(content string) error {
 	}
 
 	data.MsgType = string(MsgTypeText)
-	data.ToUserName = r.toUserName
+	data.ToUserName = touser
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Content = content
@@ -122,7 +122,7 @@ func (r *messageReply) ReplyText(content string) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) ReplyImage(mediaId string) error {
+func (r *messageReply) SendImage(touser string, mediaId string) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -132,7 +132,7 @@ func (r *messageReply) ReplyImage(mediaId string) error {
 	}
 
 	data.MsgType = string(MsgTypeImage)
-	data.ToUserName = r.toUserName
+	data.ToUserName = touser
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Image.MediaId = mediaId
@@ -140,7 +140,7 @@ func (r *messageReply) ReplyImage(mediaId string) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) ReplyVoice(mediaId string) error {
+func (r *messageReply) SendVoice(touser string, mediaId string) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -150,7 +150,7 @@ func (r *messageReply) ReplyVoice(mediaId string) error {
 	}
 
 	data.MsgType = string(MsgTypeVoice)
-	data.ToUserName = r.toUserName
+	data.ToUserName = touser
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Voice.MediaId = mediaId
@@ -158,7 +158,7 @@ func (r *messageReply) ReplyVoice(mediaId string) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) ReplyVideo(mediaId string, info TitleDesc) error {
+func (r *messageReply) SendVideo(touser string, mediaId string, info TitleDesc) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -169,7 +169,7 @@ func (r *messageReply) ReplyVideo(mediaId string, info TitleDesc) error {
 	}
 
 	data.MsgType = string(MsgTypeVideo)
-	data.ToUserName = r.toUserName
+	data.ToUserName = touser
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Video.MediaId = mediaId
@@ -178,7 +178,7 @@ func (r *messageReply) ReplyVideo(mediaId string, info TitleDesc) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) ReplyMusic(info TitleDesc, music Music) error {
+func (r *messageReply) SendMusic(touser string, info TitleDesc, music Music) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -189,7 +189,7 @@ func (r *messageReply) ReplyMusic(info TitleDesc, music Music) error {
 	}
 
 	data.MsgType = string(MsgTypeMusic)
-	data.ToUserName = r.toUserName
+	data.ToUserName = touser
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.M.TitleDesc = info
@@ -198,7 +198,7 @@ func (r *messageReply) ReplyMusic(info TitleDesc, music Music) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) ReplyImageText(articles []Article) error {
+func (r *messageReply) SendImageText(touser string, articles []Article) error {
 	var data struct {
 		MsgHeader
 		ArticleCount int
@@ -206,66 +206,10 @@ func (r *messageReply) ReplyImageText(articles []Article) error {
 	}
 
 	data.MsgType = string(MsgTypeNews)
-	data.ToUserName = r.toUserName
+	data.ToUserName = touser
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Articles = articles
 
 	return r.reply(&data)
-}
-
-// custom service message response
-
-type ServiceMsgHeader struct {
-	ToUser  string `json:"touser"`
-	MsgType string `json:"msgtype"`
-}
-
-type TextContent struct {
-	Content string `json:"content"`
-}
-type ServiceTextMsgResponse struct {
-	ServiceMsgHeader
-	Text TextContent `json:"text"`
-}
-
-type MediaIdContent struct {
-	MediaId string `json:"media_id"`
-}
-type ServiceImageMsgResponse struct {
-	ServiceMsgHeader
-	Image MediaIdContent `json:"image"`
-}
-
-type ServiceVoiceMsgResponse struct {
-	ServiceMsgHeader
-	Voice MediaIdContent `json:"voice"`
-}
-
-type VideoContent struct {
-	MediaIdContent
-	TitleDesc
-}
-type ServiceVideoMsgResponse struct {
-	ServiceMsgHeader
-	Video VideoContent `json:"video"`
-}
-
-type MusicContent struct {
-	TitleDesc
-	MusicUrl     string `json:"musicurl"`
-	HQMusicUrl   string `json:"hqmusicurl"`
-	ThumbMediaId string `json:"thumb_media_id"`
-}
-type ServiceMusicMsgResponse struct {
-	ServiceMsgHeader
-	Music MusicContent `json:"music"`
-}
-
-type NewsContent struct {
-	Articles []Article `json:"articles"`
-}
-type ServiceImageTextMsgResponse struct {
-	ServiceMsgHeader
-	News NewsContent `json:"news"`
 }

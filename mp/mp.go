@@ -17,12 +17,20 @@ import (
 )
 
 const (
-	baseUrl  = "https://api.weixin.qq.com/cgi-bin"
-	tokenUri = "/token"
-
-	menuCreateUri = "/menu/create"
-	menuQueryUri  = "/menu/get"
-	menuDelUri    = "/menu/delete"
+	baseUrl              = "https://api.weixin.qq.com/cgi-bin"
+	tokenUri             = "/token"
+	customSendUri        = "/message/custom/send"
+	menuCreateUri        = "/menu/create"
+	menuQueryUri         = "/menu/get"
+	menuDelUri           = "/menu/delete"
+	groupCreateUri       = "/groups/create"
+	groupQueryUri        = "groups/get"
+	GroupIdUri           = "/groups/getid"
+	groupUpdateUri       = "/groups/update"
+	groupMemberUpdateUri = "/groups/members/update"
+	userInfoUri          = "/user/info"
+	followersUri         = "/user/get"
+	qrCodeCreate         = "/qrcode/create"
 )
 
 const (
@@ -30,7 +38,15 @@ const (
 	jsonContentType = "application/json; charset=utf-8"
 )
 
-type HandlerFunc func(reply MessageReplyer, m *Message)
+type LangType string
+
+const (
+	LangCN LangType = "Zh_CN"
+	LangTW          = "zh_TW"
+	LangEN          = "en"
+)
+
+type HandlerFunc func(reply MessageSender, m *Message)
 
 type accessToken struct {
 	token  string
@@ -43,8 +59,9 @@ type MP struct {
 	url       string
 	appToken  string
 	token     accessToken
-	menu      *Menu
 	routes    map[string]HandlerFunc
+	menu      *Menu
+	groups    []Group
 }
 
 func New(appId, appSecret, appToken string) *MP {
@@ -97,8 +114,7 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if handle, ok := mp.routes[msg.MsgType]; ok {
-		reply := &messageReply{toUserName: msg.ToUserName,
-			fromUserName: msg.FromUserName, w: w}
+		reply := &messageReply{fromUserName: msg.ToUserName, w: w}
 		handle(reply, &msg)
 	}
 }
@@ -159,21 +175,9 @@ func (mp *MP) requestToken() (err error) {
 }
 
 func (mp *MP) SetMenu(menu *Menu) (err error) {
-	b, err := json.Marshal(&menu.buttons)
-	if err != nil {
-		return
+	if err = mp.sendJson(menuCreateUri, &menu.buttons); err == nil {
+		mp.menu = menu
 	}
-
-	var response Error
-	url := baseUrl + menuCreateUri + fmt.Sprintf("?access_token=%s", mp.token.token)
-	if err = post(url, jsonContentType, bytes.NewBuffer(b), &response); err != nil {
-		return
-	}
-	if err = checkCode(response); err != nil {
-		return
-	}
-
-	mp.menu = menu
 	return
 }
 
@@ -207,6 +211,290 @@ func (mp *MP) DelMenu() (err error) {
 	}
 
 	mp.menu = nil
+	return nil
+}
+
+func (mp *MP) CreateGroup(name string) error {
+	var req, resp struct {
+		Grp Group `json:"group"`
+		Error
+	}
+
+	req.Grp.Name = name
+	b, err := json.Marshal(&req)
+	if err != nil {
+		return err
+	}
+
+	url := baseUrl + groupCreateUri + fmt.Sprintf("?access_token=%s", mp.token.token)
+	if err := post(url, jsonContentType, bytes.NewBuffer(b), &resp); err != nil {
+		return err
+	}
+	if err := checkCode(resp.Error); err != nil {
+		return err
+	}
+
+	mp.groups = append(mp.groups, resp.Grp)
+
+	return nil
+}
+
+func (mp *MP) Groups() ([]Group, error) {
+	var resp struct {
+		Groups []Group `json:"groups"`
+		Error
+	}
+
+	url := baseUrl + groupQueryUri + fmt.Sprintf("?access_token=%s", mp.token.token)
+	if err := get(url, &resp); err != nil {
+		return nil, err
+	}
+	if err := checkCode(resp.Error); err != nil {
+		return nil, err
+	}
+
+	mp.groups = resp.Groups
+
+	return mp.groups, nil
+}
+
+func (mp *MP) GroupId(uid string) (gid int, err error) {
+	var req struct {
+		Uid string `json:"openid"`
+	}
+
+	var resp struct {
+		GroupId int `json:"groupid"`
+		Error
+	}
+
+	req.Uid = uid
+	b, err := json.Marshal(&req)
+	if err != nil {
+		return
+	}
+	url := baseUrl + GroupIdUri + fmt.Sprintf("?access_token=%s", mp.token.token)
+	if err = post(url, jsonContentType, bytes.NewBuffer(b), &resp); err != nil {
+		return
+	}
+	if err = checkCode(resp.Error); err != nil {
+		return
+	}
+
+	return resp.GroupId, nil
+}
+
+func (mp *MP) UpdateGroup(group Group) error {
+	var req struct {
+		Grp Group `json:"group"`
+	}
+
+	return mp.sendJson(groupUpdateUri, &req)
+}
+
+func (mp *MP) MoveMember2Group(uid string, gid int) error {
+	var req struct {
+		Uid string `json:"openid"`
+		Gid int    `json:"to_groupid"`
+	}
+
+	return mp.sendJson(groupMemberUpdateUri, &req)
+}
+
+func (mp *MP) UserInfo(uid string, lang LangType) (User, error) {
+	var resp struct {
+		User
+		Error
+	}
+
+	url := baseUrl + userInfoUri +
+		fmt.Sprintf("?access_token=%s&openid=%s&lang=%s",
+			mp.token.token, uid, lang)
+	if err := get(url, &resp); err != nil {
+		return resp.User, err
+	}
+	if err := checkCode(resp.Error); err != nil {
+		return resp.User, err
+	}
+
+	return resp.User, nil
+}
+
+func (mp *MP) Followers(start string) (int, []string, string, error) {
+	var resp struct {
+		Total int `json:"total"`
+		Count int `json:"count"`
+		Data  struct {
+			OpenId []string `json:"openid"`
+		} `json:"data"`
+		Next string `json:"next_openid"`
+		Error
+	}
+
+	url := baseUrl + followersUri + fmt.Sprintf("?access_token=%s", mp.token.token)
+	if len(start) != 0 {
+		url += fmt.Sprintf("&next_openid=%s", start)
+	}
+	if err := get(url, &resp); err != nil {
+		return 0, nil, "", err
+	}
+	if err := checkCode(resp.Error); err != nil {
+		return 0, nil, "", err
+	}
+
+	return resp.Total, resp.Data.OpenId, resp.Next, nil
+}
+
+// if expire != 0, return temp qrcode
+func (mp *MP) QRCode(expire, sceneId int) (string, error) {
+	var req struct {
+		Expire int    `json:"expire_seconds,omitempty"`
+		Action string `json:"action_name"`
+		Info   struct {
+			Scene struct {
+				Id int `json:"scene_id"`
+			} `json:"scene"`
+		} `json:"action_info"`
+	}
+
+	var resp struct {
+		Ticket string `json:"ticket"`
+		Expire int    `json:"expire_seconds"`
+		Error
+	}
+
+	req.Expire = expire
+	if expire == 0 {
+		req.Action = "QR_LIMIT_SCENE"
+	} else {
+		req.Action = "QR_SCENE"
+	}
+	req.Info.Scene.Id = sceneId
+	b, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+
+	url := baseUrl + qrCodeCreate + fmt.Sprintf("?access_token=%s", mp.token.token)
+	if err := post(url, jsonContentType, bytes.NewBuffer(b), &resp); err != nil {
+		return "", err
+	}
+	if err := checkCode(resp.Error); err != nil {
+		return "", err
+	}
+
+	return resp.Ticket, nil
+}
+
+func (mp *MP) SendText(touser string, content string) error {
+	var data struct {
+		ServiceMsgHeader
+		Text struct {
+			Content string `json:"content"`
+		} `json:"text"`
+	}
+
+	data.ToUser = touser
+	data.MsgType = string(MsgTypeText)
+	data.Text.Content = content
+
+	return mp.sendJson(customSendUri, &data)
+}
+
+func (mp *MP) SendImage(touser string, mediaId string) error {
+	var data struct {
+		ServiceMsgHeader
+		Image struct {
+			MediaId string `json:"media_id"`
+		} `json:"image"`
+	}
+
+	data.ToUser = touser
+	data.MsgType = string(MsgTypeImage)
+	data.Image.MediaId = mediaId
+
+	return mp.sendJson(customSendUri, &data)
+}
+
+func (mp *MP) SendVoice(touser string, mediaId string) error {
+	var data struct {
+		ServiceMsgHeader
+		Voice struct {
+			MediaId string `json:"media_id"`
+		} `json:"voice"`
+	}
+
+	data.ToUser = touser
+	data.MsgType = string(MsgTypeVoice)
+	data.Voice.MediaId = mediaId
+
+	return mp.sendJson(customSendUri, &data)
+}
+
+func (mp *MP) SendVideo(touser string, mediaId string, info TitleDesc) error {
+	var data struct {
+		ServiceMsgHeader
+		Video struct {
+			MediaId string `json:"media_id"`
+			TitleDesc
+		} `json:"video"`
+	}
+
+	data.ToUser = touser
+	data.MsgType = string(MsgTypeVideo)
+	data.Video.MediaId = mediaId
+	data.Video.TitleDesc = info
+
+	return mp.sendJson(customSendUri, &data)
+}
+
+func (mp *MP) SendMusic(touser string, info TitleDesc, music Music) error {
+	var data struct {
+		ServiceMsgHeader
+		M struct {
+			TitleDesc
+			Music
+		} `json:"music"`
+	}
+
+	data.ToUser = touser
+	data.MsgType = string(MsgTypeMusic)
+	data.M.TitleDesc = info
+	data.M.Music = music
+
+	return mp.sendJson(customSendUri, &data)
+}
+
+func (mp *MP) SendImageText(touser string, articles []Article) error {
+	var data struct {
+		ServiceMsgHeader
+		News struct {
+			Articles []Article `json:"articles"`
+		} `json:"news"`
+	}
+
+	data.ToUser = touser
+	data.MsgType = string(MsgTypeNews)
+	data.News.Articles = articles
+
+	return mp.sendJson(customSendUri, &data)
+}
+
+func (mp *MP) sendJson(uri string, v interface{}) error {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	var result Error
+	url := uri + fmt.Sprintf("?access_token=%s", mp.token.token)
+	if err = post(url, jsonContentType, bytes.NewBuffer(data), &result); err != nil {
+		return err
+	}
+	if err = checkCode(result); err != nil {
+		return err
+	}
+
 	return nil
 }
 

@@ -3,50 +3,25 @@ package mp
 
 import ()
 
-const (
-	groupCreateUri       = "/groups/create"
-	groupQueryUri        = "groups/get"
-	UserGroupUri         = "/groups/getid"
-	groupUpdateUri       = "/groups/update"
-	groupMemberUpdateUri = "/groups/members/update"
+const ()
 
-	userInfoUri      = "/user/info"
-	userFollowersUri = "/user/get"
-)
-
-type GroupContent struct {
+type Group struct {
 	Id    int    `json:"id"`
 	Name  string `json:"name"`
-	Count int    `json:"count"`
+	Count int    `json:"count,omitempty"`
 }
 
-type GroupCreateResponse struct {
-	Group GroupContent `json:"group"`
-	Error
-}
-
-type GroupQueryResponse struct {
-	Groups []GroupContent `json:"groups"`
-	Error
-}
-
-type UserGroupResponse struct {
-	GroupId int `json:"groupid"`
-	Error
-}
-
-type UserInfoResponse struct {
+type User struct {
 	Subscribe     bool   `json:"subscribe"`
 	OpenId        string `json:"openid"`
 	Nickname      string `json:"nickname"`
-	Sex           bool   `json:"sex"`
+	Sex           int    `json:"sex"`
 	Language      string `json:"language"`
 	City          string `json:"city"`
 	Province      string `json:"province"`
 	Country       string `json:"country"`
 	HeadImgUrl    string `json:"headimgurl"`
-	SubscribeTime uint64 `json:"subscribe_time"`
-	Error
+	SubscribeTime int64  `json:"subscribe_time"`
 }
 
 type OpenIdList struct {

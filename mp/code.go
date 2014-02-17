@@ -130,13 +130,17 @@ const (
 )
 
 type Error struct {
-	Code int    `json:"errcode"`
-	Msg  string `json:"errmsg"`
+	Code int    `json:"errcode,omitempty"`
+	Msg  string `json:"errmsg,omitempty"`
+}
+
+func (err *Error) String() string {
+	return strconv.Itoa(err.Code) + ": " + err.Msg
 }
 
 func checkCode(err Error) error {
 	if err.Code != Success {
-		return errors.New(strconv.Itoa(err.Code) + ": " + err.Msg)
+		return errors.New(err.String())
 	}
 	return nil
 }
