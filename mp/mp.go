@@ -10,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"sort"
 	"strings"
@@ -24,18 +25,29 @@ const (
 	menuQueryUri         = "/menu/get"
 	menuDelUri           = "/menu/delete"
 	groupCreateUri       = "/groups/create"
-	groupQueryUri        = "groups/get"
+	groupQueryUri        = "/groups/get"
 	GroupIdUri           = "/groups/getid"
 	groupUpdateUri       = "/groups/update"
 	groupMemberUpdateUri = "/groups/members/update"
 	userInfoUri          = "/user/info"
 	followersUri         = "/user/get"
-	qrCodeCreate         = "/qrcode/create"
+	qrCodeCreateUri      = "/qrcode/create"
+	mediaUploadUri       = "/media/upload"
+	mediaDownloadUri     = "/media/get"
 )
 
 const (
 	xmlContentType  = "application/xml; charset=utf-8"
 	jsonContentType = "application/json; charset=utf-8"
+)
+
+type MediaType string
+
+const (
+	MediaImage MediaType = "image"
+	MediaVoice           = "voice"
+	MediaVideo           = "video"
+	MediaThumb           = "thumb"
 )
 
 type LangType string
@@ -46,7 +58,7 @@ const (
 	LangEN          = "en"
 )
 
-type HandlerFunc func(reply MessageSender, m *Message)
+type HandlerFunc func(reply MessageReplyer, m *Message)
 
 type accessToken struct {
 	token  string
@@ -114,7 +126,8 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if handle, ok := mp.routes[msg.MsgType]; ok {
-		reply := &messageReply{fromUserName: msg.ToUserName, w: w}
+		reply := &messageReply{fromUserName: msg.ToUserName,
+			toUserName: msg.FromUserName, w: w}
 		handle(reply, &msg)
 	}
 }
@@ -375,7 +388,7 @@ func (mp *MP) QRCode(expire, sceneId int) (string, error) {
 		return "", err
 	}
 
-	url := baseUrl + qrCodeCreate + fmt.Sprintf("?access_token=%s", mp.token.token)
+	url := baseUrl + qrCodeCreateUri + fmt.Sprintf("?access_token=%s", mp.token.token)
 	if err := post(url, jsonContentType, bytes.NewBuffer(b), &resp); err != nil {
 		return "", err
 	}
@@ -384,6 +397,62 @@ func (mp *MP) QRCode(expire, sceneId int) (string, error) {
 	}
 
 	return resp.Ticket, nil
+}
+
+func (mp *MP) UploadMedia(mediaType MediaType, filename string, reader io.Reader) (mediaId string, err error) {
+	var resp struct {
+		Type      string `json:"type"`
+		MediaId   string `json:"media_id"`
+		CreatedAt int64  `json:"created_at"`
+		Error
+	}
+
+	b := &bytes.Buffer{}
+	writer := multipart.NewWriter(b)
+	defer writer.Close()
+
+	formFile, err := writer.CreateFormFile("filename", filename)
+	if err != nil {
+		return
+	}
+	if _, err := io.Copy(formFile, reader); err != nil {
+		return "", err
+	}
+
+	url := baseUrl + mediaUploadUri +
+		fmt.Sprintf("?access_token=%s&type=%s", mp.token.token, mediaType)
+	if err := post(url, writer.FormDataContentType(), b, &resp); err != nil {
+		return "", err
+	}
+	if err := checkCode(resp.Error); err != nil {
+		return "", err
+	}
+
+	return resp.MediaId, nil
+}
+
+func (mp *MP) DownloadMedia(mediaId string) (io.Reader, error) {
+	url := baseUrl + mediaDownloadUri +
+		fmt.Sprintf("?access_token=%s&media_id=%s", mp.token.token, mediaId)
+
+	r, err := http.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Body.Close()
+
+	b := &bytes.Buffer{}
+	if _, err := io.Copy(b, r.Body); err != nil {
+		return nil, err
+	}
+
+	var resp Error
+
+	if err := json.Unmarshal(b.Bytes(), &resp); err == nil {
+		return nil, checkCode(resp)
+	}
+
+	return b, nil
 }
 
 func (mp *MP) SendText(touser string, content string) error {

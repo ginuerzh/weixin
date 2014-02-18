@@ -82,17 +82,18 @@ type Message struct {
 	Precision    float64
 }
 
-type MessageSender interface {
-	SendText(touser string, content string) error
-	SendImage(touser string, mediaId string) error
-	SendVoice(touser string, mediaId string) error
-	SendVideo(touser string, mediaId string, info TitleDesc) error
-	SendMusic(touser string, info TitleDesc, music Music) error
-	SendImageText(touser string, articles []Article) error
+type MessageReplyer interface {
+	ReplyText(content string) error
+	ReplyImage(mediaId string) error
+	ReplyVoice(mediaId string) error
+	ReplyVideo(mediaId string, info TitleDesc) error
+	ReplyMusic(info TitleDesc, music Music) error
+	ReplyImageText(articles []Article) error
 }
 
 type messageReply struct {
 	fromUserName string
+	toUserName   string
 	w            http.ResponseWriter
 }
 
@@ -106,7 +107,7 @@ func (r *messageReply) reply(v interface{}) error {
 	return err
 }
 
-func (r *messageReply) SendText(touser string, content string) error {
+func (r *messageReply) ReplyText(content string) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -114,7 +115,7 @@ func (r *messageReply) SendText(touser string, content string) error {
 	}
 
 	data.MsgType = string(MsgTypeText)
-	data.ToUserName = touser
+	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Content = content
@@ -122,7 +123,7 @@ func (r *messageReply) SendText(touser string, content string) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) SendImage(touser string, mediaId string) error {
+func (r *messageReply) ReplyImage(mediaId string) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -132,7 +133,7 @@ func (r *messageReply) SendImage(touser string, mediaId string) error {
 	}
 
 	data.MsgType = string(MsgTypeImage)
-	data.ToUserName = touser
+	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Image.MediaId = mediaId
@@ -140,7 +141,7 @@ func (r *messageReply) SendImage(touser string, mediaId string) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) SendVoice(touser string, mediaId string) error {
+func (r *messageReply) ReplyVoice(mediaId string) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -150,7 +151,7 @@ func (r *messageReply) SendVoice(touser string, mediaId string) error {
 	}
 
 	data.MsgType = string(MsgTypeVoice)
-	data.ToUserName = touser
+	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Voice.MediaId = mediaId
@@ -158,7 +159,7 @@ func (r *messageReply) SendVoice(touser string, mediaId string) error {
 	return r.reply(&data)
 }
 
-func (r *messageReply) SendVideo(touser string, mediaId string, info TitleDesc) error {
+func (r *messageReply) ReplyVideo(mediaId string, info TitleDesc) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -169,7 +170,7 @@ func (r *messageReply) SendVideo(touser string, mediaId string, info TitleDesc) 
 	}
 
 	data.MsgType = string(MsgTypeVideo)
-	data.ToUserName = touser
+	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Video.MediaId = mediaId
@@ -178,7 +179,7 @@ func (r *messageReply) SendVideo(touser string, mediaId string, info TitleDesc) 
 	return r.reply(&data)
 }
 
-func (r *messageReply) SendMusic(touser string, info TitleDesc, music Music) error {
+func (r *messageReply) ReplyMusic(info TitleDesc, music Music) error {
 	var data struct {
 		XMLName xml.Name `xml:"xml"`
 		MsgHeader
@@ -189,7 +190,7 @@ func (r *messageReply) SendMusic(touser string, info TitleDesc, music Music) err
 	}
 
 	data.MsgType = string(MsgTypeMusic)
-	data.ToUserName = touser
+	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.M.TitleDesc = info
@@ -198,7 +199,7 @@ func (r *messageReply) SendMusic(touser string, info TitleDesc, music Music) err
 	return r.reply(&data)
 }
 
-func (r *messageReply) SendImageText(touser string, articles []Article) error {
+func (r *messageReply) ReplyImageText(articles []Article) error {
 	var data struct {
 		MsgHeader
 		ArticleCount int
@@ -206,7 +207,7 @@ func (r *messageReply) SendImageText(touser string, articles []Article) error {
 	}
 
 	data.MsgType = string(MsgTypeNews)
-	data.ToUserName = touser
+	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
 	data.Articles = articles
