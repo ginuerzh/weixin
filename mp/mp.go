@@ -12,6 +12,7 @@ import (
 	"log"
 	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"sort"
 	"strconv"
 	"strings"
@@ -409,6 +410,48 @@ func (mp *MP) QRCode(expire, sceneId int) (string, error) {
 	return resp.Ticket, nil
 }
 
+var quoteEscaper = strings.NewReplacer("\\", "\\\\", `"`, "\\\"")
+
+func escapeQuotes(s string) string {
+	return quoteEscaper.Replace(s)
+}
+
+func createFormFile(writer *multipart.Writer, fieldname, filename, mime string) (io.Writer, error) {
+	h := make(textproto.MIMEHeader)
+	h.Set("Content-Disposition",
+		fmt.Sprintf(`form-data; name="%s"; filename="%s"`,
+			escapeQuotes(fieldname), escapeQuotes(filename)))
+	if len(mime) == 0 {
+		mime = "application/octet-stream"
+	}
+	h.Set("Content-Type", mime)
+	return writer.CreatePart(h)
+}
+
+func makeFormData(filename, mimeType string, content io.Reader) (formData io.Reader, contentType string, err error) {
+	buf := new(bytes.Buffer)
+	writer := multipart.NewWriter(buf)
+
+	part, err := createFormFile(writer, "media", filename, mimeType)
+	//log.Println(filename, mimeType)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	_, err = io.Copy(part, content)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	formData = buf
+	contentType = writer.FormDataContentType()
+	//log.Println(contentType)
+	writer.Close()
+
+	return
+}
+
 func (mp *MP) UploadMedia(mediaType MediaType, filename string, reader io.Reader) (mediaId string, err error) {
 	var resp struct {
 		Type      string `json:"type"`
@@ -416,22 +459,26 @@ func (mp *MP) UploadMedia(mediaType MediaType, filename string, reader io.Reader
 		CreatedAt int64  `json:"created_at"`
 		Error
 	}
+	/*
+		b := &bytes.Buffer{}
+		writer := multipart.NewWriter(b)
+		defer writer.Close()
 
-	b := &bytes.Buffer{}
-	writer := multipart.NewWriter(b)
-	defer writer.Close()
-
-	formFile, err := writer.CreateFormFile("media", filename)
+		formFile, err := writer.CreateFormFile("media", filename)
+		if err != nil {
+			return
+		}
+		if _, err := io.Copy(formFile, reader); err != nil {
+			return "", err
+		}
+	*/
+	data, contentType, err := makeFormData(filename, "image/jpeg", reader)
 	if err != nil {
-		return
-	}
-	if _, err := io.Copy(formFile, reader); err != nil {
 		return "", err
 	}
-
 	url := baseUrl + mediaUploadUri +
 		fmt.Sprintf("?access_token=%s&type=%s", mp.token.token, mediaType)
-	if err := post(url, writer.FormDataContentType(), b, &resp); err != nil {
+	if err := post(url, contentType, data, &resp); err != nil {
 		return "", err
 	}
 	if err := checkCode(resp.Error); err != nil {
