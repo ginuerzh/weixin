@@ -211,6 +211,7 @@ func (r *messageReply) ReplyImageText(articles []Article) error {
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
+	data.ArticleCount = len(articles)
 	data.Articles = articles
 
 	return r.reply(&data)
