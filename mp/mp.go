@@ -105,6 +105,7 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Println(signature, timestamp, nonce)
 
 	if !mp.checkSignature(signature, timestamp, nonce) {
+		log.Println("checkSignature failed!")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
