@@ -117,15 +117,20 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	data, err := ioutil.ReadAll(r.Body)
 	if err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	msg := Message{}
 	if err := xml.Unmarshal(data, &msg); err != nil {
+		log.Println(err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	log.Println(msg.MsgType)
+	log.Println(msg)
 
 	if handle, ok := mp.routes[msg.MsgType]; ok {
 		reply := &messageReply{fromUserName: msg.ToUserName,
