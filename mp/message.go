@@ -201,6 +201,7 @@ func (r *messageReply) ReplyMusic(info TitleDesc, music Music) error {
 
 func (r *messageReply) ReplyImageText(articles []Article) error {
 	var data struct {
+		XMLName xml.Name `xml:"xml"`
 		MsgHeader
 		ArticleCount int
 		Articles     []Article `xml:"Articles>item"`

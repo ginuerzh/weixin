@@ -96,6 +96,7 @@ func (mp *MP) HandleFunc(msgType MsgType, handler HandlerFunc) {
 		mp.routes = make(map[string]HandlerFunc)
 	}
 	mp.routes[string(msgType)] = handler
+	log.Println(mp.routes)
 }
 
 func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -420,7 +421,7 @@ func (mp *MP) UploadMedia(mediaType MediaType, filename string, reader io.Reader
 	writer := multipart.NewWriter(b)
 	defer writer.Close()
 
-	formFile, err := writer.CreateFormFile("filename", filename)
+	formFile, err := writer.CreateFormFile("media", filename)
 	if err != nil {
 		return
 	}
