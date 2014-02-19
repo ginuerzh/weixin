@@ -7,8 +7,8 @@ import (
 )
 
 const (
-	SystemBusy = -1   // 系统繁忙
-	Success    = iota // 请求成功
+	SystemBusy = -1 // 系统繁忙
+	Success    = 0  // 请求成功
 )
 
 const (

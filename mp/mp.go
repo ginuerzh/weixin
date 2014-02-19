@@ -13,6 +13,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -132,9 +133,9 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (mp *MP) Run() error {
+func (mp *MP) Run(port int) error {
 	http.Handle(mp.url, mp)
-	return http.ListenAndServe(":8080", nil)
+	return http.ListenAndServe(":"+strconv.Itoa(port), nil)
 }
 
 func (mp *MP) checkSignature(signature, timestamp, nonce string) bool {
@@ -172,10 +173,12 @@ func (mp *MP) requestToken() (err error) {
 		fmt.Sprintf("?grant_type=client_credential&appid=%s&secret=%s",
 			mp.appId, mp.appSecret)
 	if err = get(url, &response); err != nil {
+		//log.Println(err)
 		mp.token.expire = 3 * time.Second
 		return err
 	}
 	if err = checkCode(response.Error); err != nil {
+		//log.Println(err)
 		mp.token.expire = 3 * time.Second
 		return err
 	}
