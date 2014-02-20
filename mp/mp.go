@@ -104,7 +104,7 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	signature := r.FormValue("signature")
 	timestamp := r.FormValue("timestamp")
 	nonce := r.FormValue("nonce")
-	log.Println(signature, timestamp, nonce)
+	//log.Println(signature, timestamp, nonce)
 
 	if !mp.checkSignature(signature, timestamp, nonce) {
 		log.Println("checkSignature failed!")
@@ -131,8 +131,8 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Println(msg.MsgType)
-	log.Println(msg)
+	//log.Println(msg.MsgType)
+	//log.Println(msg)
 
 	if handle, ok := mp.routes[msg.MsgType]; ok {
 		reply := &messageReply{fromUserName: msg.ToUserName,
@@ -193,7 +193,7 @@ func (mp *MP) requestToken() (err error) {
 
 	mp.token.token = response.AccessToken
 	mp.token.expire = time.Duration(response.Expire * int64(time.Second))
-	log.Println("get token success!", mp.token.token)
+	//log.Println("get token success!", mp.token.token)
 
 	return nil
 }
