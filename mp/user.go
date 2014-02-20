@@ -12,7 +12,7 @@ type Group struct {
 }
 
 type User struct {
-	Subscribe     bool   `json:"subscribe"`
+	Subscribe     int    `json:"subscribe"`
 	OpenId        string `json:"openid"`
 	Nickname      string `json:"nickname"`
 	Sex           int    `json:"sex"`
