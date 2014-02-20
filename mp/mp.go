@@ -186,7 +186,7 @@ func (mp *MP) RefreshToken(retry int) (err error) {
 			}
 		}
 
-		if retry == 0 {
+		if err == nil || retry == 0 {
 			return
 		}
 		if retry > 0 {
@@ -216,7 +216,7 @@ func (mp *MP) requestToken() (err error) {
 
 	mp.token.token = response.AccessToken
 	mp.token.expire = time.Duration(response.Expire * int64(time.Second))
-	//log.Println("get token success!", mp.token.token)
+  log.Println("new access token:", mp.token.token)
 
 	return nil
 }
