@@ -60,7 +60,7 @@ const (
 	LangEN          = "en"
 )
 
-type HandlerFunc func(reply MessageReplyer, m *Message)
+type HandlerFunc func(reply Replyer, m *Message)
 
 type accessToken struct {
 	token  string
@@ -70,7 +70,6 @@ type accessToken struct {
 type MP struct {
 	appId     string
 	appSecret string
-	url       string
 	appToken  string
 	token     accessToken
 	routes    map[string]HandlerFunc
@@ -79,25 +78,40 @@ type MP struct {
 }
 
 func New(appId, appSecret, appToken string) *MP {
-	mp := &MP{appId: appId, appSecret: appSecret, appToken: appToken}
-	if err := mp.requestToken(); err != nil {
-		log.Println(err)
-	}
-	go mp.refreshToken()
+	mp := &MP{appId: appId, appSecret: appSecret, appToken: appToken,
+		token:  accessToken{token: "", expire: 1},
+		routes: make(map[string]HandlerFunc)}
+
+	// default event handler, you can overwrite it by setting
+	// your own event handler
+	mp.HandleFunc(MsgEvent, func(reply Replyer, m *Message) {
+		if handle, ok := mp.routes[m.Type+"."+m.Event]; ok {
+			handle(reply, m)
+		}
+	})
+	// default click event handler
+	mp.EventFunc(EventClick, func(reply Replyer, m *Message) {
+		k := m.Type + "." + m.Event + "." + m.EventKey
+		if handle, ok := mp.routes[k]; ok {
+			handle(reply, m)
+		}
+	})
 
 	return mp
 }
 
-func (mp *MP) Init(url string) {
-	mp.url = url
+func (mp *MP) HandleFunc(msgType MsgType, handler HandlerFunc) {
+	mp.routes[string(msgType)] = handler
 }
 
-func (mp *MP) HandleFunc(msgType MsgType, handler HandlerFunc) {
-	if mp.routes == nil {
-		mp.routes = make(map[string]HandlerFunc)
-	}
-	mp.routes[string(msgType)] = handler
-	log.Println(mp.routes)
+func (mp *MP) EventFunc(event EventType, handler HandlerFunc) {
+	k := string(MsgEvent) + "." + string(event)
+	mp.routes[k] = handler
+}
+
+func (mp *MP) KeyFunc(key string, handler HandlerFunc) {
+	k := string(MsgClickEvent) + "." + key
+	mp.routes[k] = handler
 }
 
 func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -131,18 +145,20 @@ func (mp *MP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//log.Println(msg.MsgType)
-	//log.Println(msg)
+	reply := &messageReply{fromUserName: msg.ToUserName,
+		toUserName: msg.FromUserName, w: w}
 
-	if handle, ok := mp.routes[msg.MsgType]; ok {
-		reply := &messageReply{fromUserName: msg.ToUserName,
-			toUserName: msg.FromUserName, w: w}
+	if handle, ok := mp.routes[msg.Type]; ok {
 		handle(reply, &msg)
+	}
+
+	if !reply.replied {
+		w.WriteHeader(http.StatusOK)
 	}
 }
 
-func (mp *MP) Run(port int) error {
-	http.Handle(mp.url, mp)
+func (mp *MP) Run(url string, port int) error {
+	http.Handle(url, mp)
 	return http.ListenAndServe(":"+strconv.Itoa(port), nil)
 }
 
@@ -156,14 +172,25 @@ func (mp *MP) checkSignature(signature, timestamp, nonce string) bool {
 	return signature == fmt.Sprintf("%x", h.Sum(nil))
 }
 
-func (mp *MP) refreshToken() (err error) {
+// retry <= 0: infinite retry
+func (mp *MP) RefreshToken(retry int) (err error) {
+	retry--
+
 	for {
 		select {
 		case <-time.Tick(mp.token.expire):
-			if err := mp.requestToken(); err != nil {
+			if err = mp.requestToken(); err != nil {
 				log.Println(err)
+				mp.token.expire = 3 * time.Second
 				break
 			}
+		}
+
+		if retry == 0 {
+			return
+		}
+		if retry > 0 {
+			retry--
 		}
 	}
 
@@ -181,13 +208,9 @@ func (mp *MP) requestToken() (err error) {
 		fmt.Sprintf("?grant_type=client_credential&appid=%s&secret=%s",
 			mp.appId, mp.appSecret)
 	if err = get(url, &response); err != nil {
-		//log.Println(err)
-		mp.token.expire = 3 * time.Second
 		return err
 	}
 	if err = checkCode(response.Error); err != nil {
-		//log.Println(err)
-		mp.token.expire = 3 * time.Second
 		return err
 	}
 
@@ -521,7 +544,7 @@ func (mp *MP) SendText(touser string, content string) error {
 	}
 
 	data.ToUser = touser
-	data.MsgType = string(MsgTypeText)
+	data.Type = string(MsgText)
 	data.Text.Content = content
 
 	return mp.sendJson(customSendUri, &data)
@@ -536,7 +559,7 @@ func (mp *MP) SendImage(touser string, mediaId string) error {
 	}
 
 	data.ToUser = touser
-	data.MsgType = string(MsgTypeImage)
+	data.Type = string(MsgImage)
 	data.Image.MediaId = mediaId
 
 	return mp.sendJson(customSendUri, &data)
@@ -551,7 +574,7 @@ func (mp *MP) SendVoice(touser string, mediaId string) error {
 	}
 
 	data.ToUser = touser
-	data.MsgType = string(MsgTypeVoice)
+	data.Type = string(MsgVoice)
 	data.Voice.MediaId = mediaId
 
 	return mp.sendJson(customSendUri, &data)
@@ -567,7 +590,7 @@ func (mp *MP) SendVideo(touser string, mediaId string, info TitleDesc) error {
 	}
 
 	data.ToUser = touser
-	data.MsgType = string(MsgTypeVideo)
+	data.Type = string(MsgVideo)
 	data.Video.MediaId = mediaId
 	data.Video.TitleDesc = info
 
@@ -584,7 +607,7 @@ func (mp *MP) SendMusic(touser string, info TitleDesc, music Music) error {
 	}
 
 	data.ToUser = touser
-	data.MsgType = string(MsgTypeMusic)
+	data.Type = string(MsgMusic)
 	data.M.TitleDesc = info
 	data.M.Music = music
 
@@ -600,7 +623,7 @@ func (mp *MP) SendImageText(touser string, articles []Article) error {
 	}
 
 	data.ToUser = touser
-	data.MsgType = string(MsgTypeNews)
+	data.Type = string(MsgNews)
 	data.News.Articles = articles
 
 	return mp.sendJson(customSendUri, &data)

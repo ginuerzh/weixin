@@ -11,33 +11,38 @@ type MsgType string
 type EventType string
 
 const (
-	MsgTypeText     MsgType = "text"
-	MsgTypeImage            = "image"
-	MsgTypeVoice            = "voice"
-	MsgTypeVideo            = "video"
-	MsgTypeMusic            = "music"
-	MsgTypeNews             = "news"
-	MsgTypeLocation         = "location"
-	MsgTypeLink             = "link"
-	MsgTypeEvent            = "event"
+	MsgText             MsgType = "text"
+	MsgImage                    = "image"
+	MsgVoice                    = "voice"
+	MsgVideo                    = "video"
+	MsgMusic                    = "music"
+	MsgNews                     = "news"
+	MsgLocation                 = "location"
+	MsgLink                     = "link"
+	MsgEvent                    = "event"
+	MsgSubscribeEvent           = "event.subscribe"
+	MsgUnsubscribeEvent         = "event.unsubscribe"
+	MsgScanEvent                = "event.SCAN"
+	MsgLocationEvent            = "event.LOCATION"
+	MsgClickEvent               = "event.CLICK"
 
-	MsgTypeEventSubscribe   = "subscribe"
-	MsgTypeEventUnsubscribe = "unsubscribe"
-	MsgTypeEventScan        = "SCAN"
-	MsgTypeEventLocation    = "LOCATION"
-	MsgTypeEventClick       = "CLICK"
+	EventSubscribe   EventType = "subscribe"
+	EventUnsubscribe           = "unsubscribe"
+	EventScan                  = "SCAN"
+	EventLocation              = "LOCATION"
+	EventClick                 = "CLICK"
 )
 
 type MsgHeader struct {
 	ToUserName   string
 	FromUserName string
 	CreateTime   int64
-	MsgType      string
+	Type         string
 }
 
 type ServiceMsgHeader struct {
-	ToUser  string `json:"touser"`
-	MsgType string `json:"msgtype"`
+	ToUser string `json:"touser"`
+	Type   string `json:"msgtype"`
 }
 
 type TitleDesc struct {
@@ -82,7 +87,7 @@ type Message struct {
 	Precision    float64
 }
 
-type MessageReplyer interface {
+type Replyer interface {
 	ReplyText(content string) error
 	ReplyImage(mediaId string) error
 	ReplyVoice(mediaId string) error
@@ -95,9 +100,12 @@ type messageReply struct {
 	fromUserName string
 	toUserName   string
 	w            http.ResponseWriter
+	replied      bool
 }
 
 func (r *messageReply) reply(v interface{}) error {
+	r.replied = true
+
 	data, err := xml.Marshal(v)
 	if err != nil {
 		return err
@@ -114,7 +122,7 @@ func (r *messageReply) ReplyText(content string) error {
 		Content string
 	}
 
-	data.MsgType = string(MsgTypeText)
+	data.Type = string(MsgText)
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
@@ -132,7 +140,7 @@ func (r *messageReply) ReplyImage(mediaId string) error {
 		}
 	}
 
-	data.MsgType = string(MsgTypeImage)
+	data.Type = string(MsgImage)
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
@@ -150,7 +158,7 @@ func (r *messageReply) ReplyVoice(mediaId string) error {
 		}
 	}
 
-	data.MsgType = string(MsgTypeVoice)
+	data.Type = string(MsgVoice)
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
@@ -169,7 +177,7 @@ func (r *messageReply) ReplyVideo(mediaId string, info TitleDesc) error {
 		}
 	}
 
-	data.MsgType = string(MsgTypeVideo)
+	data.Type = string(MsgVideo)
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
@@ -189,7 +197,7 @@ func (r *messageReply) ReplyMusic(info TitleDesc, music Music) error {
 		} `xml:"Music"`
 	}
 
-	data.MsgType = string(MsgTypeMusic)
+	data.Type = string(MsgMusic)
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
@@ -207,7 +215,7 @@ func (r *messageReply) ReplyImageText(articles []Article) error {
 		Articles     []Article `xml:"Articles>item"`
 	}
 
-	data.MsgType = string(MsgTypeNews)
+	data.Type = string(MsgNews)
 	data.ToUserName = r.toUserName
 	data.FromUserName = r.fromUserName
 	data.CreateTime = time.Now().Unix()
